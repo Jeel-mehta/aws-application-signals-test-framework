@@ -4,7 +4,7 @@
 name: Sample App Deployment - Dotnet S3
 on:
   workflow_dispatch: # be able to run the workflow on demand
-  #push:
+
 permissions:
   id-token: write
   contents: read
@@ -14,7 +14,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        aws-region: [ 'us-east-1']
+        aws-region: [ 'af-south-1','ap-east-1','ap-northeast-1','ap-northeast-2','ap-northeast-3','ap-south-1','ap-south-2','ap-southeast-1',
+                      'ap-southeast-2','ap-southeast-3','ap-southeast-4','ca-central-1','eu-central-1','eu-central-2','eu-north-1',
+                      'eu-south-1','eu-south-2','eu-west-1','eu-west-2','eu-west-3','il-central-1','me-central-1','me-south-1', 'sa-east-1',
+                      'us-east-1','us-east-2', 'us-west-1', 'us-west-2' ]
         dotnet-version: [ '6.0', '8.0' ]
     runs-on: ubuntu-latest
     env:
@@ -31,17 +34,18 @@ jobs:
           role-to-assume: ${{ secrets.E2E_IAD_TEST_ACCOUNT_ARN }}
           aws-region: us-east-1
 
-      # - name: Retrieve account
-      #   uses: aws-actions/aws-secretsmanager-get-secrets@v1
-      #   with:
-      #     secret-ids:
-      #       ACCOUNT_ID, region-account/${{ matrix.aws-region }}
+      - name: Retrieve account
+        uses: aws-actions/aws-secretsmanager-get-secrets@v1
+        with:
+          secret-ids:
+            ACCOUNT_ID, region-account/${{ matrix.aws-region }}
 
-      # - name: Configure AWS Credentials
-      #   uses: aws-actions/configure-aws-credentials@v4
-      #   with:
-      #     role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/${{ secrets.E2E_TEST_ROLE_ARN }}
-      #     aws-region: ${{ matrix.aws-region }}
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.ACCOUNT_ID }}:role/${{ secrets.E2E_TEST_ROLE_ARN }}
+          aws-region: ${{ matrix.aws-region }}
+
       - name: Update .NET version if not default
         working-directory: sample-apps/dotnet
         run: |
@@ -97,62 +101,20 @@ jobs:
             echo "Using default version ${DEFAULT_VERSION}, no changes needed"
           fi
 
-      # - name: Update .NET version if not default
-      #   working-directory: terraform/dotnet/ec2/default
-      #   run: |
-      #     if [ "${DOTNET_VERSION}" != "${DEFAULT_VERSION}" ]; then
-      #       echo "Updating .NET version from ${DEFAULT_VERSION} to ${DOTNET_VERSION}"
-            
-      #       # Function to update version in files
-      #       update_version() {
-      #         local file=$1
-      #         if [ ! -f "$file" ]; then
-      #           echo "Error: File $file not found"
-      #           exit 1
-      #         fi      
-
-      #       # Update version in main.tf files
-      #         if [[ $file == main.tf ]]; then
-      #           # Update dnf install command
-      #           sed -i "s/dotnet-sdk-${DEFAULT_VERSION}/dotnet-sdk-${DOTNET_VERSION}/g" "$file"
-      #           # Update nohup dotnet command
-      #           sed -i "s/netcoreapp${DEFAULT_VERSION}/netcoreapp${DOTNET_VERSION}/g" "$file"
-      #         fi
-
-      #         if [ $? -ne 0 ]; then
-      #           echo "Error: Failed to update version in $file"
-      #           exit 1
-      #         fi
-      #         echo "Successfully updated $file"
-      #       }
-
-      #       # Update all relevant files
-      #       update_version "main.tf"
-
-      #       # Verify changes
-      #       echo "Verifying changes..."
-      #       echo "=== main.tf ==="
-      #       grep -n "dotnet-sdk-${DOTNET_VERSION}" main.tf
-      #       echo "=== main.tf ==="
-      #       grep -n "netcoreapp${DOTNET_VERSION}" main.tf
-      #     else
-      #       echo "Using default version ${DEFAULT_VERSION}, no changes needed"
-      #     fi
-
       - name: Build Sample App Zip
         working-directory: sample-apps/dotnet
         run: zip -r dotnet-sample-app:${DOTNET_VERSION}.zip .
 
       - name: Upload to S3
         working-directory: sample-apps/dotnet
-        run: aws s3api put-object --bucket aws-appsignals-sample-app-prod-jeel --body ./dotnet-sample-app:${DOTNET_VERSION}.zip --key dotnet-sample-app:${DOTNET_VERSION}.zip
+        run: aws s3api put-object --bucket aws-appsignals-sample-app-prod-${{ matrix.aws-region }} --body ./dotnet-sample-app:${DOTNET_VERSION}.zip --key dotnet-sample-app:${DOTNET_VERSION}.zip
 
       - name: Upload Windows Script to S3
         working-directory: sample-apps/dotnet
         run: |
-          aws s3api put-object --bucket aws-appsignals-sample-app-prod-jeel --body ./dotnet-ec2-win-main-setup.ps1 --key dotnet-ec2-win-main-setup.ps1
-          aws s3api put-object --bucket aws-appsignals-sample-app-prod-jeel --body ./dotnet-ec2-win-remote-setup.ps1 --key dotnet-ec2-win-remote-setup.ps1
-          aws s3api put-object --bucket aws-appsignals-sample-app-prod-jeel --body ./amazon-cloudwatch-agent.json --key amazon-cloudwatch-agent.json
+          aws s3api put-object --bucket aws-appsignals-sample-app-prod-${{ matrix.aws-region }} --body ./dotnet-ec2-win-main-setup.ps1 --key dotnet-ec2-win-main-setup.ps1
+          aws s3api put-object --bucket aws-appsignals-sample-app-prod-${{ matrix.aws-region }} --body ./dotnet-ec2-win-remote-setup.ps1 --key dotnet-ec2-win-remote-setup.ps1
+          aws s3api put-object --bucket aws-appsignals-sample-app-prod-j${{ matrix.aws-region }} --body ./amazon-cloudwatch-agent.json --key amazon-cloudwatch-agent.json
        
 
   build-and-upload-lambda-sample-app:
