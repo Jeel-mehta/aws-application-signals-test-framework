@@ -116,11 +116,7 @@ resource "null_resource" "main_service_setup" {
       sudo yum install -y wget
       sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
       sudo wget -O /etc/yum.repos.d/microsoft-prod.repo https://packages.microsoft.com/config/fedora/37/prod.repo
-      if [[ "${var.language_version}" == "8.0" ]]; then
-        sudo dnf install -y dotnet-sdk-8.0
-      else
-        sudo dnf install -y dotnet-sdk-6.0
-      fi
+      sudo dnf install -y dotnet-sdk-8.0
       sudo yum install unzip -y
 
       # Copy in CW Agent configuration
@@ -136,8 +132,8 @@ resource "null_resource" "main_service_setup" {
       ${var.get_adot_distro_command}
 
       # Get and run the sample application with configuration
-      aws s3 cp s3://aws-appsignals-sample-app-prod-jeel/dotnet-sample-app:${var.language_version}.zip ./dotnet-sample-app:${var.language_version}.zip
-      unzip -o dotnet-sample-app:${var.language_version}.zip
+      aws s3 cp ${var.sample_app_zip} ./dotnet-sample-app.zip
+      unzip -o dotnet-sample-app.zip
 
       # Get Absolute Path
       current_dir=$(pwd)
@@ -145,7 +141,6 @@ resource "null_resource" "main_service_setup" {
 
       # Export environment variables for instrumentation
       cd ./asp_frontend_service
-      dotnet build
       export CORECLR_ENABLE_PROFILING=1
       export CORECLR_PROFILER={918728DD-259F-4A6A-AC2B-B85E1B658318}
       export CORECLR_PROFILER_PATH=$current_dir/dotnet-distro/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so
@@ -163,7 +158,8 @@ resource "null_resource" "main_service_setup" {
       export OTEL_AWS_APPLICATION_SIGNALS_RUNTIME_ENABLED=false
       export OTEL_TRACES_SAMPLER=always_on
       export ASPNETCORE_URLS=http://0.0.0.0:8080
-      nohup dotnet bin/Debug/netcoreapp${var.language_version}/asp_frontend_service.dll &
+      dotnet build
+      nohup dotnet bin/Debug/netcoreapp8.0/asp_frontend_service.dll &
 
       # The application needs time to come up and reach a steady state, this should not take longer than 30 seconds
       sleep 30
@@ -228,11 +224,7 @@ resource "null_resource" "remote_service_setup" {
       sudo yum install -y wget
       sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
       sudo wget -O /etc/yum.repos.d/microsoft-prod.repo https://packages.microsoft.com/config/fedora/37/prod.repo
-      if [[ "${var.language_version}" == "8.0" ]]; then
-        sudo dnf install -y dotnet-sdk-8.0
-      else
-        sudo dnf install -y dotnet-sdk-6.0
-      fi
+      sudo dnf install -y dotnet-sdk-8.0
       sudo yum install unzip -y
 
       # Copy in CW Agent configuration
@@ -248,8 +240,8 @@ resource "null_resource" "remote_service_setup" {
       ${var.get_adot_distro_command}
 
       # Get and run the sample application with configuration
-      aws s3 cp s3://aws-appsignals-sample-app-prod-jeel/dotnet-sample-app:${var.language_version}.zip ./dotnet-sample-app:${var.language_version}.zip
-      unzip -o dotnet-sample-app:${var.language_version}.zip
+      aws s3 cp ${var.sample_app_zip} ./dotnet-sample-app.zip
+      unzip -o dotnet-sample-app.zip
 
       # Get Absolute Path
       current_dir=$(pwd)
@@ -257,7 +249,6 @@ resource "null_resource" "remote_service_setup" {
 
       # Export environment variables for instrumentation
       cd ./asp_remote_service
-      dotnet build
       export CORECLR_ENABLE_PROFILING=1
       export CORECLR_PROFILER={918728DD-259F-4A6A-AC2B-B85E1B658318}
       export CORECLR_PROFILER_PATH=$current_dir/dotnet-distro/linux-x64/OpenTelemetry.AutoInstrumentation.Native.so
@@ -275,7 +266,8 @@ resource "null_resource" "remote_service_setup" {
       export OTEL_AWS_APPLICATION_SIGNALS_RUNTIME_ENABLED=false
       export OTEL_TRACES_SAMPLER=always_on
       export ASPNETCORE_URLS=http://0.0.0.0:8081
-      nohup dotnet bin/Debug/netcoreapp${var.language_version}/asp_remote_service.dll &
+      dotnet build
+      nohup dotnet bin/Debug/netcoreapp8.0/asp_remote_service.dll &
 
       # The application needs time to come up and reach a steady state, this should not take longer than 30 seconds
       sleep 30
@@ -315,7 +307,7 @@ resource "null_resource" "traffic_generator_setup" {
         sudo yum install nodejs aws-cli unzip tmux -y
 
         # Bring in the traffic generator files to EC2 Instance
-        aws s3 cp s3://aws-appsignals-sample-app-prod-jeel/traffic-generator.zip ./traffic-generator.zip
+        aws s3 cp s3://aws-appsignals-sample-app-prod-${var.aws_region}/traffic-generator.zip ./traffic-generator.zip
         unzip ./traffic-generator.zip -d ./
 
         # Install the traffic generator dependencies
