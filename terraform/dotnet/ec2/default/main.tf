@@ -116,10 +116,10 @@ resource "null_resource" "main_service_setup" {
       sudo yum install -y wget
       sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
       sudo wget -O /etc/yum.repos.d/microsoft-prod.repo https://packages.microsoft.com/config/fedora/37/prod.repo
-      if [[ "${var.language_version}" == "8.0" ]]; then
-        sudo dnf install -y dotnet-sdk-8.0
-      else
+      if [[ "${var.language_version}" == "6.0" ]]; then
         sudo dnf install -y dotnet-sdk-6.0
+      else
+        sudo dnf install -y dotnet-sdk-8.0
       fi
       sudo yum install unzip -y
 
@@ -136,8 +136,8 @@ resource "null_resource" "main_service_setup" {
       ${var.get_adot_distro_command}
 
       # Get and run the sample application with configuration
-      aws s3 cp ${var.sample_app_zip} ./dotnet-sample-app.zip
-      unzip -o dotnet-sample-app.zip
+      aws s3 cp s3://aws-appsignals-sample-app-prod-jeel/dotnet-sample-app-${var.language_version}.zip ./dotnet-sample-app-${var.language_version}.zip
+      unzip -o dotnet-sample-app-${var.language_version}.zip
 
       # Get Absolute Path
       current_dir=$(pwd)
@@ -228,10 +228,10 @@ resource "null_resource" "remote_service_setup" {
       sudo yum install -y wget
       sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
       sudo wget -O /etc/yum.repos.d/microsoft-prod.repo https://packages.microsoft.com/config/fedora/37/prod.repo
-      if [[ "${var.language_version}" == "8.0" ]]; then
-        sudo dnf install -y dotnet-sdk-8.0
-      else
+      if [[ "${var.language_version}" == "6.0" ]]; then
         sudo dnf install -y dotnet-sdk-6.0
+      else
+        sudo dnf install -y dotnet-sdk-8.0
       fi
       sudo yum install unzip -y
 
@@ -248,8 +248,8 @@ resource "null_resource" "remote_service_setup" {
       ${var.get_adot_distro_command}
 
       # Get and run the sample application with configuration
-      aws s3 cp ${var.sample_app_zip} ./dotnet-sample-app.zip
-      unzip -o dotnet-sample-app.zip
+      aws s3 cp s3://aws-appsignals-sample-app-prod-jeel/dotnet-sample-app-${var.language_version}.zip ./dotnet-sample-app-${var.language_version}.zip
+      unzip -o dotnet-sample-app-${var.language_version}.zip
 
       # Get Absolute Path
       current_dir=$(pwd)
