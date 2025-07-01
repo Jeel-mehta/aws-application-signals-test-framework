@@ -83,6 +83,9 @@ resource "null_resource" "deploy" {
         sleep 10
         kubectl wait --for=condition=Ready pod --all -n amazon-cloudwatch
       elif [ "${var.repository}" = "amazon-cloudwatch-agent" ]; then
+        # tempory fix for missing permissions that will be added by next release of cloudwatch agent operator
+        kubectl patch clusterrole cloudwatch-agent-role --type=json \
+        -p='[{"op": "add", "path": "/rules/-", "value": {"apiGroups": ["discovery.k8s.io"], "resources": ["endpointslices"], "verbs": ["list", "watch", "get"]}}]'
         kubectl patch amazoncloudwatchagents -n amazon-cloudwatch cloudwatch-agent --type='json' -p='[{"op": "replace", "path": "/spec/image", "value": ${var.patch_image_arn}}]'
         kubectl delete pods --all -n amazon-cloudwatch
         sleep 10
@@ -131,7 +134,10 @@ resource "null_resource" "deploy" {
           --docker-password="$${TOKEN}"
 
         yq eval '.spec.template.spec.imagePullSecrets += [{"name": "release-testing-ecr-secret"}]' -i dotnet-frontend-service-depl.yaml
-        yq eval '.spec.template.spec.imagePullSecrets += [{"name": "release-testing-ecr-secret"}]' -i dotnet-remote-service-depl.yaml
+
+        service_part=$(yq eval 'select(.kind == "Service")' dotnet-remote-service-depl.yaml)
+        yq eval 'select(.kind == "Deployment") | .spec.template.spec.imagePullSecrets += {"name": "release-testing-ecr-secret"}' -i dotnet-remote-service-depl.yaml
+        echo -e "\n---\n$service_part" >> dotnet-remote-service-depl.yaml
       fi
 
       echo "LOG: Applying sample app deployment files"

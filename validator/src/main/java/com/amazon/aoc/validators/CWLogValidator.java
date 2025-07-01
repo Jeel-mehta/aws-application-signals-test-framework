@@ -65,14 +65,36 @@ public class CWLogValidator implements IValidator {
           // which are in normal text as they are needed for
           // the filter expressions for retrieving the actual logs.
           log.info("Searching for expected log: {}", expectedAttributes);
-          String operation = (String) expectedAttributes.get("Operation");
-          String remoteService = (String) expectedAttributes.get("RemoteService");
-          String remoteOperation = (String) expectedAttributes.get("RemoteOperation");
-          String remoteResourceType = (String) expectedAttributes.get("RemoteResourceType");
-          String remoteResourceIdentifier = (String) expectedAttributes.get("RemoteResourceIdentifier");
+          Map<String, Object> actualLog;
 
-          Map<String, Object> actualLog =
+          if (isAwsOtlpLog(expectedAttributes)) {
+                    actualLog = this.getActualAwsOtlpLog();
+          } else {
+            String operation = (String) expectedAttributes.get("Operation");
+            String remoteService = (String) expectedAttributes.get("RemoteService");
+            String remoteOperation = (String) expectedAttributes.get("RemoteOperation");
+            String remoteResourceType = (String) expectedAttributes.get("RemoteResourceType");
+            String remoteResourceIdentifier = (String) expectedAttributes.get("RemoteResourceIdentifier");
+
+           // Parsing unique identifiers in OTLP spans
+            if (operation == null) {
+              operation = (String) expectedAttributes.get("attributes[\\\"aws.local.operation\\\"]");
+              remoteService = (String) expectedAttributes.get("attributes[\\\"aws.remote.service\\\"]");
+              remoteOperation = (String) expectedAttributes.get("attributes[\\\"aws.remote.operation\\\"]");
+              // Runtime metrics have no operation at all, we must ensure we are in the proper use case
+              if (operation != null) {
+                actualLog = this.getActualOtelSpanLog(operation, remoteService, remoteOperation);
+              } else {
+                // No operation at all -> Runtime metric
+                actualLog =
                   this.getActualLog(operation, remoteService, remoteOperation, remoteResourceType, remoteResourceIdentifier);
+              }
+            }
+            else {
+              actualLog =
+                this.getActualLog(operation, remoteService, remoteOperation, remoteResourceType, remoteResourceIdentifier);
+            }
+          }
           log.info("Value of an actual log: {}", actualLog);
 
           if (actualLog == null) throw new BaseException(ExceptionCode.EXPECTED_LOG_NOT_FOUND);
@@ -129,6 +151,13 @@ public class CWLogValidator implements IValidator {
     return flattenedJsonMapForExpectedLogArray;
   }
 
+  private boolean isAwsOtlpLog(Map<String, Object> expectedAttributes) {
+    // OTLP SigV4 logs have 'body' as a top-level attribute
+    return expectedAttributes.containsKey("body") &&
+           expectedAttributes.containsKey("severityNumber") &&
+           expectedAttributes.containsKey("severityText");
+  }
+
   private Map<String, Object> getActualLog(
     String operation, String remoteService, String remoteOperation, String remoteResourceType, String remoteResourceIdentifier) throws Exception {
     String dependencyFilter = null;
@@ -140,7 +169,7 @@ public class CWLogValidator implements IValidator {
     if (remoteService == null && remoteOperation == null) {
       dependencyFilter = "&& ($.RemoteService NOT EXISTS) && ($.RemoteOperation NOT EXISTS)";
     } else {
-      dependencyFilter = String.format("&& ($.RemoteService = \"%s\") && ($.RemoteOperation = \"%s\")", remoteService, remoteOperation);
+      dependencyFilter = String.format(" && ($.RemoteService = \"%s\") && ($.RemoteOperation = \"%s\")", remoteService, remoteOperation);
     }
 
     if (remoteResourceType != null && remoteResourceIdentifier != null) {
@@ -166,6 +195,61 @@ public class CWLogValidator implements IValidator {
 
     if (retrievedLogs == null || retrievedLogs.isEmpty()) {
       throw new BaseException(ExceptionCode.EMPTY_LIST);
+    }
+
+    return JsonFlattener.flattenAsMap(retrievedLogs.get(0).getMessage());
+  }
+
+  private Map<String, Object> getActualOtelSpanLog(String operation, String remoteService, String remoteOperation) throws Exception {
+    String dependencyFilter = null;
+
+    if (operation != null) {
+      dependencyFilter = String.format("&& ($.attributes.['aws.local.operation'] = \"%s\")", operation);
+    }
+    if (remoteService != null) {
+      dependencyFilter += String.format("&& ($.attributes.['aws.remote.service'] = \"%s\")", remoteService);
+    } else {
+      dependencyFilter += "&& ($.attributes.['aws.remote.service'] NOT EXISTS)";
+    }
+    if (remoteOperation != null) {
+      dependencyFilter += String.format("&& ($.attributes.['aws.remote.operation'] = \"%s\")", remoteOperation);
+    } else {
+      dependencyFilter += "&& ($.attributes.['aws.remote.operation'] NOT EXISTS)";
+    }
+
+    String filterPattern = String.format("{ ($.attributes.['aws.local.service'] = %s) %s }", context.getServiceName(), dependencyFilter);
+    log.info("Filter Pattern for Log Search: " + filterPattern);
+
+    List<FilteredLogEvent> retrievedLogs =
+      this.cloudWatchService.filterLogs(
+        context.getLogGroup(),
+        filterPattern,
+        System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(5),
+        10);
+
+    if (retrievedLogs == null || retrievedLogs.isEmpty()) {
+      throw new BaseException(ExceptionCode.EMPTY_LIST);
+    }
+
+    return JsonFlattener.flattenAsMap(retrievedLogs.get(0).getMessage());
+  }
+
+  private Map<String, Object> getActualAwsOtlpLog() throws Exception {
+    String filterPattern= String.format(
+            "{ ($.resource.attributes.['service.name'] = \"%s\") && ($.body = \"This is a custom log for validation testing\") }",
+            context.getServiceName()
+        );
+    log.info("Filter Pattern for OTLP Log Search: " + filterPattern);
+
+    List<FilteredLogEvent> retrievedLogs =
+        this.cloudWatchService.filterLogs(
+            context.getLogGroup(),
+            filterPattern,
+            System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(5),
+            10);
+
+    if (retrievedLogs == null || retrievedLogs.isEmpty()) {
+        throw new BaseException(ExceptionCode.EMPTY_LIST);
     }
 
     return JsonFlattener.flattenAsMap(retrievedLogs.get(0).getMessage());
